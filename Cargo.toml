@@ -2,8 +2,12 @@
 name = "sorts"
 version = "0.1.0"
 authors = ["Jihoon Son <jihoonson@apache.org>"]
+build = "build.rs"
 
 [dependencies]
 rand = "*"
-rlibc = "0.1.4"
+rlibc = "*"
 time = "*"
+
+[build-dependencies]
+gcc = "*"
