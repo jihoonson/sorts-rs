@@ -2,6 +2,7 @@ extern crate libc;
 
 use sort::SortAlgorithm;
 use std::intrinsics::write_bytes;
+extern crate time;
 
 extern {
     fn shift_left(f: *mut libc::c_void, pass: libc::c_ushort) -> libc::size_t;
@@ -45,23 +46,21 @@ impl<'a> SortAlgorithm<'a> for RadixSort<'a, Vec<String>> {
     fn sort(&'a mut self) {
         let &mut RadixSort (ref mut strings) = self;
 
-        let mut pointers: Vec<&String> = Vec::with_capacity(strings.len());
-        let mut tmp: Vec<&String> = Vec::with_capacity(strings.len());
+        // TODO: adjust the length of positions
+        // let mut clone = strings.clone();
+        // let mut input: Vec<&[u8]> = clone.iter().map(|s| s.as_bytes()).collect::<Vec<_>>();
+        // let mut output: Vec<&[u8]> = clone.iter().map(|s| s.as_bytes()).collect::<Vec<_>>();
         let mut positions: Vec<usize> = vec![0; 256];
 
-        let mut max_len: u16 = 0;
-        for s in strings.iter() {
-            if max_len < s.len() as u16 {
-                max_len = s.len() as u16
-            }
-            pointers.push(&s);
-        }
+        let mut max_len = strings.iter().map(|s| s.len()).max().unwrap();
 
-        sort_str(&mut pointers,
-            &mut tmp,
+        let mut output: Vec<String> = Vec::with_capacity(strings.len());
+
+        sort_str(strings,
+            &mut output,
             &mut positions,
-            max_len,
-            false);
+            max_len - 1,
+            max_len % 2 == 0);
     }
 }
 
@@ -84,7 +83,7 @@ fn sort_u32(input: &mut Vec<u32>,
 
     // TODO: improve the below condition
     if positions.first() == Some(&input.len()) {
-        recursive_sort_u32_if_necessary(input, output, positions, pass, need_copy == false);
+        recursive_sort_u32_if_necessary(input, output, positions, pass, need_copy ^ true);
     } else {
         for i in (0..input.len()).rev() {
             let key: usize = ((input[i] >> (pass * 8)) as u8) as usize;
@@ -136,7 +135,7 @@ fn sort_f32(input: &mut Vec<f32>,
 
     // TODO: improve the below condition
     if positions.first() == Some(&input.len()) {
-        recursive_sort_f32_if_necessary(input, output, positions, pass, need_copy == false);
+        recursive_sort_f32_if_necessary(input, output, positions, pass, need_copy ^ true);
     } else {
         for i in (0..input.len()).rev() {
             unsafe {
@@ -169,51 +168,79 @@ fn recursive_sort_f32_if_necessary(input: &mut Vec<f32>,
     }
 }
 
-fn sort_str<'a>(input: &mut Vec<&'a String>,
-    output: &mut Vec<&'a String>,
+fn sort_str<'a>(input: &mut Vec<String>,
+    output: &mut Vec<String>,
     positions: &mut Vec<usize>,
-    pass: u16,
+    pass: usize,
     need_copy: bool) {
 
-    println!("pass: {}", pass);
+    // let mut start = time::now();
 
     // Count
-    unsafe {
-        for n in input.iter() {
-            let mut t:String = (**n).clone();
-            println!("t: {}", t);
-            let key: usize = shift_right(&mut t as *mut _ as *mut libc::c_void, pass) as usize;
+    for s in input.iter() {
+        // let key: usize = shift_right(&mut t as *mut _ as *mut libc::c_void, pass) as usize;
+
+        if s.len() <= pass as usize {
+            positions[0] += 1;
+        } else {
+            let bytes = s.as_bytes();
+            let key: usize = bytes[pass] as usize;
             positions[key] += 1;
         }
     }
 
+    // let mut end = time::now();
+    // println!("Done1 {} ms", (end-start).num_milliseconds());
+
+    // start = time::now();
     // Calculate positions
     for i in 0..positions.len()-1 {
         positions[i+1] += positions[i];
     }
 
+    // end = time::now();
+    // println!("Done2 {} ms", (end-start).num_milliseconds());
+
     // TODO: improve the below condition
     if positions.first() == Some(&input.len()) {
-        recursive_sort_str_if_necessary(input, output, positions, pass, need_copy == false);
+        recursive_sort_str_if_necessary(input, output, positions, pass, need_copy ^ true);
     } else {
-        for n in input.iter().rev() {
-            unsafe {
-                let mut t:String = (**n).clone();
-                println!("t: {}", t);
-                let key: usize = shift_right(&mut t as *mut _ as *mut libc::c_void, pass) as usize;
-                output[positions[key]-1] = n;
+        // start = time::now();
+        for i in input.len()-1..0 {
+            if input[i].len() <= pass {
+                output[positions[0]-1] = input[i];
+                positions[0] -= 1;
+            } else {
+                let bytes = input[i].as_bytes();
+                let key: usize = bytes[pass] as usize;
+                output[positions[key]-1] = input[i];
                 positions[key] -= 1;
             }
         }
 
-        recursive_sort_str_if_necessary(input, output, positions, pass, need_copy);
+        // for s in input.iter().rev() {
+        //     if s.len() <= pass as usize {
+        //         output[positions[0]-1] = *s;
+        //         positions[0] -= 1;
+        //     } else {
+        //         let bytes = s.as_bytes();
+        //         let key: usize = bytes[pass] as usize;
+        //         output[positions[key]-1] = *s;
+        //         positions[key] -= 1;
+        //     }
+        // }
+
+        // end = time::now();
+        // println!("Done3 {} ms", (end-start).num_milliseconds());
+
+        recursive_sort_str_if_necessary(input, output, positions, pass, need_copy ^ true);
     }
 }
 
-fn recursive_sort_str_if_necessary<'a>(input: &mut Vec<&'a String>,
-                            output: &mut Vec<&'a String>,
+fn recursive_sort_str_if_necessary<'a >(input: &mut Vec<String>,
+                            output: &mut Vec<String>,
                             positions: &mut Vec<usize>,
-                            pass: u16,
+                            pass: usize,
                             need_copy: bool) {
     if pass > 0 {
         unsafe {
@@ -221,9 +248,8 @@ fn recursive_sort_str_if_necessary<'a>(input: &mut Vec<&'a String>,
         }
         sort_str(output, input, positions, pass-1, need_copy);
     } else {
-        // do nothing
         if need_copy {
-            output.clone_from(input);
+            input.clone_from(output);
         }
     }
 }

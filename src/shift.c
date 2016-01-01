@@ -5,5 +5,6 @@ size_t shift_left(void* f, unsigned short pass) {
 }
 
 size_t shift_right(void* f, unsigned short pass) {
+  printf("%d\n", *(int*)f);
   return (size_t)((unsigned char)(*((unsigned int*)f) << pass * 8));
 }
